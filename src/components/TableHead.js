@@ -41,7 +41,7 @@ class TableHead extends React.Component {
         className={classNames({ [classes.responsiveStacked]: options.responsive === 'stacked', [classes.main]: true })}>
         <TableHeadRow>
           <TableSelectCell
-            ref={el => setCellRef(0, findDOMNode(el))}
+            ref={el => setCellRef(7, findDOMNode(el))}
             onChange={this.handleRowSelect.bind(null)}
             indeterminate={isDeterminate}
             checked={isChecked}
