@@ -1,81 +1,127 @@
-import Chip from '@material-ui/core/Chip';
-import { withStyles } from '@material-ui/core/styles';
+import { makeStyles } from '@material-ui/core/styles';
 import PropTypes from 'prop-types';
 import React from 'react';
+import TableFilterListItem from './TableFilterListItem';
 
-const defaultFilterListStyles = {
-  root: {
-    display: 'flex',
-    justifyContent: 'left',
-    flexWrap: 'wrap',
-    margin: '0px 16px 0px 16px',
-  },
-  chip: {
-    margin: '8px 8px 0px 0px',
-  },
-};
+const useStyles = makeStyles(
+  () => ({
+    root: {
+      display: 'flex',
+      justifyContent: 'left',
+      flexWrap: 'wrap',
+      margin: '0px 16px 0px 16px',
+    },
+    chip: {
+      margin: '8px 8px 0px 0px',
+    },
+  }),
+  { name: 'MUIDataTableFilterList' },
+);
 
-class TableFilterList extends React.Component {
-  static propTypes = {
-    /** Data used to filter table against */
-    filterList: PropTypes.array.isRequired,
-    /** Filter List value renderers */
-    filterListRenderers: PropTypes.array.isRequired,
-    /** Columns used to describe table */
-    columnNames: PropTypes.PropTypes.arrayOf(
-      PropTypes.oneOfType([
-        PropTypes.string,
-        PropTypes.shape({ name: PropTypes.string.isRequired, filterType: PropTypes.string }),
-      ]),
-    ).isRequired,
-    /** Callback to trigger filter update */
-    onFilterUpdate: PropTypes.func,
-    /** Extend the style applied to components */
-    classes: PropTypes.object,
+const TableFilterList = ({
+  options,
+  filterList,
+  filterUpdate,
+  filterListRenderers,
+  columnNames,
+  serverSideFilterList,
+  customFilterListUpdate,
+  ItemComponent = TableFilterListItem,
+}) => {
+  const classes = useStyles();
+  const { serverSide } = options;
+
+  const removeFilter = (index, filterValue, columnName, filterType) => {
+    let removedFilter = filterValue;
+    if (Array.isArray(removedFilter) && removedFilter.length === 0) {
+      removedFilter = filterList[index];
+    }
+
+    filterUpdate(index, filterValue, columnName, filterType, null, filterList => {
+      if (options.onFilterChipClose) {
+        options.onFilterChipClose(index, removedFilter, filterList);
+      }
+    });
   };
-
-  render() {
-    const { classes, filterList, filterUpdate, filterListRenderers, columnNames, serverSideFilterList } = this.props;
-    const { serverSide } = this.props.options;
-
-    const customFilterChip = (item, index) => (
-      <Chip
-        label={filterListRenderers[index](item)}
-        key={index}
-        onDelete={filterUpdate.bind(null, index, [], columnNames[index].name, columnNames[index].filterType)}
-        className={classes.chip}
-      />
-    );
-
-    const filterChip = (index, data, colIndex) => (
-      <Chip
-        label={filterListRenderers[index](data)}
-        key={colIndex}
-        onDelete={filterUpdate.bind(null, index, data, columnNames[index].name, 'chip')}
-        className={classes.chip}
-      />
-    );
+  const customFilterChip = (customFilterItem, index, customFilterItemIndex, item, isArray) => {
+    let type;
+    // If our custom filter list is an array, we need to check for custom update functions to determine
+    // default type. Otherwise we use the supplied type in options.
+    if (isArray) {
+      type = customFilterListUpdate[index] ? 'custom' : 'chip';
+    } else {
+      type = columnNames[index].filterType;
+    }
 
     return (
-      <div className={classes.root}>
-        {serverSide
-          ? serverSideFilterList.map((item, index) => {
-              if (columnNames[index].filterType === 'custom' && filterListRenderers[index](item)) {
-                return customFilterChip(item, index);
-              }
-
-              return item.map((data, colIndex) => filterChip(index, data, colIndex));
-            })
-          : filterList.map((item, index) => {
-              if (columnNames[index].filterType === 'custom' && filterListRenderers[index](item)) {
-                return customFilterChip(item, index);
-              }
-
-              return item.map((data, colIndex) => filterChip(index, data, colIndex));
-            })}
-      </div>
+      <ItemComponent
+        label={customFilterItem}
+        key={customFilterItemIndex}
+        onDelete={() => removeFilter(index, item[customFilterItemIndex] || [], columnNames[index].name, type)}
+        className={classes.chip}
+        itemKey={customFilterItemIndex}
+        index={index}
+        data={item}
+        columnNames={columnNames}
+      />
     );
-  }
-}
+  };
 
-export default withStyles(defaultFilterListStyles, { name: 'MUIDataTableFilterList' })(TableFilterList);
+  const filterChip = (index, data, colIndex) => (
+    <ItemComponent
+      label={filterListRenderers[index](data)}
+      key={colIndex}
+      onDelete={() => removeFilter(index, data, columnNames[index].name, 'chip')}
+      className={classes.chip}
+      itemKey={colIndex}
+      index={index}
+      data={data}
+      columnNames={columnNames}
+    />
+  );
+
+  const getFilterList = filterList => {
+    return filterList.map((item, index) => {
+      if (columnNames[index].filterType === 'custom' && filterList[index].length) {
+        const filterListRenderersValue = filterListRenderers[index](item);
+
+        if (filterListRenderersValue) {
+          if (Array.isArray(filterListRenderersValue)) {
+            return filterListRenderersValue.map((customFilterItem, customFilterItemIndex) =>
+              customFilterChip(customFilterItem, index, customFilterItemIndex, item, true),
+            );
+          } else {
+            return customFilterChip(filterListRenderersValue, index, index, item, false);
+          }
+        }
+      }
+
+      return item.map((data, colIndex) => filterChip(index, data, colIndex));
+    });
+  };
+
+  return (
+    <div className={classes.root}>
+      {serverSide && serverSideFilterList ? getFilterList(serverSideFilterList) : getFilterList(filterList)}
+    </div>
+  );
+};
+
+TableFilterList.propTypes = {
+  /** Data used to filter table against */
+  filterList: PropTypes.array.isRequired,
+  /** Filter List value renderers */
+  filterListRenderers: PropTypes.array.isRequired,
+  /** Columns used to describe table */
+  columnNames: PropTypes.arrayOf(
+    PropTypes.oneOfType([
+      PropTypes.string,
+      PropTypes.shape({ name: PropTypes.string.isRequired, filterType: PropTypes.string }),
+    ]),
+  ).isRequired,
+  /** Callback to trigger filter update */
+  onFilterUpdate: PropTypes.func,
+  ItemComponent: PropTypes.any,
+};
+
+export default TableFilterList;
